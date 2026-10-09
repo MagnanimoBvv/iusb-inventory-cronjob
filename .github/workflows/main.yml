@@ -1,0 +1,23 @@
+name: Update Products Cronjob
+
+on:
+  schedule:
+    - cron: "0 * * * *"
+  workflow_dispatch:
+
+jobs:
+  update_products:
+    runs-on: ubuntu-latest
+
+    env:
+      GRAPHQL_URL: ${{ secrets.GRAPHQL_URL }}
+      SHOPIFY_TOKEN: ${{ secrets.SHOPIFY_TOKEN }}
+      USBT_AUTH_TOKEN: ${{ secrets.USBT_AUTH_TOKEN }}
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: "24" }
+      - run: npm install
+      - name: Run update
+        run: node index.js
