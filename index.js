@@ -1,8 +1,5 @@
 require('dotenv').config();
 const axios = require('axios');
-const path = require('path');
-const csv = require('csv-parse/sync');
-const XLSX = require('xlsx');
 const { getLocationId, paginateProductsByVendor, updateInventory } = require('./shopifyFunctions');
 
 const skus = {
@@ -617,62 +614,40 @@ const skus = {
     "COM024-SIN-NE": "TEC192-NE",
 }
 
-async function getUSBTProducts() {
-    const response = await axios.get(process.env.USBT_URL, {
-        responseType: 'arraybuffer',
-        maxRedirects: 10
-    });
+async function getUSBTInventory(page) {
+    const response = await axios.get(
+        'https://api.usbtechnology.mx/v1/inventory/',
+        {
+            params: {
+                page,
+                limit: 100,
+            },
+            headers: {
+                'X-API-Key': process.env.USBT_AUTH_TOKEN
+            },
+        }
+    );
 
     return response.data;
 }
 
-function parseUSBTExcel() {
-    const workbook = XLSX.readFile(path.join(__dirname, 'Existencias-ftp-precio.xlsx'));
-// function parseUSBTExcel(buffer) {
-    // const workbook = XLSX.read(buffer, {
-    //     type: 'buffer',
-    //     raw: true
-    // });
+async function paginateUSBTInventory() {
+    const firstResponse = await getUSBTInventory(1);
+    let products = firstResponse.items;
+    const pages = firstResponse.total_pages;
 
-    const worksheet = workbook.Sheets[workbook.SheetNames[0]];
-    const rows = XLSX.utils.sheet_to_json(worksheet, {
-        header: 1,
-        raw: false,
-        defval: ''
-    });
-
-    const csvContent = rows
-        .map(row => row[0])
-        .filter(value => value !== undefined && value !== null)
-        .map(value => String(value).trim())
-        .filter(Boolean)
-        .join('\n');
-
-    return csv.parse(csvContent, {
-        columns: true,
-        skip_empty_lines: true,
-        relax_column_count: true,
-        trim: true
-    }).map(product => ({
-        sku: String(product.SKU || '').trim(),
-        piezas: Number(product.PIEZAS) || 0,
-        descripcion: String(product.DESCRIPCION || '').trim(),
-        precioSinIVA: Number(product.PRECIO_SIN_IVA) || 0,
-        imagenes: String(product.IMÁGENES || '').trim()
-    }));
-}
-
-async function getUSBTInventory() {
-    const products = parseUSBTExcel();
-    // const buffer = await getUSBTProducts();
-    // const products = parseUSBTExcel(buffer);
-
-    return new Map(products.filter(product => product.sku).map(product => [product.sku, product]));
+    let page = 2;
+    while (page <= pages) {
+        const response = await getUSBTInventory(page);
+        products = [...products, ...response.items];
+        page++;
+    }
+    return products;
 }
 
 async function updateProducts() {
     const locationId = await getLocationId();
-    const usbtInventory = await getUSBTInventory();
+    const usbtInventory = await paginateUSBTInventory();
     const shopifyProducts = await paginateProductsByVendor('USB Technology');
     for (const shopifyProduct of shopifyProducts) {
         try {
@@ -682,8 +657,8 @@ async function updateProducts() {
                 const usbtSKU = skus[shopifySKU];
                 if (!usbtSKU) continue;
 
-                const activeVariant = usbtInventory.get(usbtSKU);
-                const targetInventory = activeVariant ? activeVariant.piezas : 0;
+                const activeVariant = usbtInventory.find(v => v.sku_variation === usbtSKU);
+                const targetInventory = activeVariant ? activeVariant.stock : 0;
                 const label = activeVariant ? 'Variante existente' : 'Variante faltante';
                 console.log(`${label}: ${shopifyProduct.title} ${variant.title}, Prev ${variant.inventoryQuantity} Now ${targetInventory}`);
 
