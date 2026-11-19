@@ -21,3 +21,22 @@ jobs:
       - run: npm install
       - name: Run update
         run: node index.js
+      
+  update_products_apis:
+    needs: update_products
+    runs-on: ubuntu-latest
+
+    env:
+      STORES: GI,HHG
+      GRAPHQL_URL_GI: ${{ secrets.GRAPHQL_URL_GI }}
+      SHOPIFY_TOKEN_GI: ${{ secrets.SHOPIFY_TOKEN_GI }}
+      GRAPHQL_URL_HHG: ${{ secrets.GRAPHQL_URL_HHG }}
+      SHOPIFY_TOKEN_HHG: ${{ secrets.SHOPIFY_TOKEN_HHG }}
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: "24" }
+      - run: npm install
+      - name: Run update
+        run: node indexv3.js
