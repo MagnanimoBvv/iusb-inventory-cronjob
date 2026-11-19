@@ -646,9 +646,14 @@ async function paginateUSBTInventory() {
 }
 
 async function updateProducts() {
-    const locationId = await getLocationId();
+    const store = {
+        name: 'ImportacionesUSB',
+        graphqlUrl: process.env.GRAPHQL_URL,
+        shopifyToken: process.env.SHOPIFY_TOKEN
+    };
+    const locationId = await getLocationId(store);
     const usbtInventory = await paginateUSBTInventory();
-    const shopifyProducts = await paginateProductsByVendor('USB Technology');
+    const shopifyProducts = await paginateProductsByVendor(store, 'USB Technology');
     for (const shopifyProduct of shopifyProducts) {
         try {
             const shopifyVariants = shopifyProduct.variants.nodes;
@@ -674,7 +679,7 @@ async function updateProducts() {
                     name: 'available',
                     reason: 'correction',
                 };
-                const response = await updateInventory(variantToUpdate);
+                const response = await updateInventory(store, variantToUpdate);
                 console.log('Inventario actualizado:', response.changes);
             }
         } catch (error) {

@@ -1,13 +1,13 @@
 const axios = require('axios');
 
-async function shopifyGraphQL(query, variables) {
+async function shopifyGraphQL(store, query, variables) {
     const response = await axios.post(
-        process.env.GRAPHQL_URL,
+        store.graphqlUrl,
         JSON.stringify({ query, variables }),
         {
             headers: {
                 'Content-Type': 'application/json',
-                'X-Shopify-Access-Token': process.env.SHOPIFY_TOKEN,
+                'X-Shopify-Access-Token': store.shopifyToken,
             }
         }
     );
@@ -15,8 +15,8 @@ async function shopifyGraphQL(query, variables) {
     return response.data.data;
 }
 
-async function getLocationId() {
-    const data = await shopifyGraphQL(`
+async function getLocationId(store) {
+    const data = await shopifyGraphQL(store, `
         query {
             locations(first: 10) {
                 nodes {
@@ -30,8 +30,8 @@ async function getLocationId() {
     return data.locations.nodes[0].id;
 }
 
-async function getProductsByVendor(cursor, vendor) {
-    const data = await shopifyGraphQL(`
+async function getProductsByVendor(store, cursor, vendor) {
+    const data = await shopifyGraphQL(store, `
         query {
             products(first: 100, ${cursor ? `after: "${cursor}",` : ''} query: "vendor:${vendor} status:active") {
                 pageInfo { hasNextPage endCursor }
@@ -56,13 +56,13 @@ async function getProductsByVendor(cursor, vendor) {
     return data.products;
 }
 
-async function paginateProductsByVendor(vendorName) {
+async function paginateProductsByVendor(store, vendorName) {
     const products = [];
     let cursor = null;
     let hasNext = true;
 
     while (hasNext) {
-        const page = await getProductsByVendor(cursor, vendorName);
+        const page = await getProductsByVendor(store, cursor, vendorName);
         products.push(...page.nodes);
         hasNext = page.pageInfo.hasNextPage;
         cursor = page.pageInfo.endCursor;
@@ -71,9 +71,9 @@ async function paginateProductsByVendor(vendorName) {
     return products;
 }
 
-async function updateInventory(input) {
+async function updateInventory(store, input) {
     const idempotencyKey = crypto.randomUUID();
-    const data = await shopifyGraphQL(`
+    const data = await shopifyGraphQL(store, `
         mutation InventorySet($input: InventorySetQuantitiesInput!) {
             inventorySetQuantities(input: $input) @idempotent(key: "${idempotencyKey}") {
                 inventoryAdjustmentGroup {
